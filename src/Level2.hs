@@ -22,12 +22,14 @@ import MetaUtils (todo, todoImpl)
 -- Законы Applicative и их имена — в лекции 8, слайд 23.
 
 identityCounterexample :: [Int]
-identityCounterexample = todo "2.1 Identity"
+identityCounterexample = [1, 2, 3]
 
 newtype PointN a = PointN { getPointN :: [a] }
   deriving (Eq, Show, Functor)
 
-todoImpl ''Applicative ''PointN
+instance Applicative PointN where
+  pure x = PointN { getPointN = repeat x }
+  PointN fs <*> PointN xs = PointN $ map (uncurry ($)) (zip fs xs)
 
 
 -- 2.2. Точка с произвольными индексами.
@@ -44,9 +46,14 @@ pointIExample = PointI $ \case
   "y" -> 4
   unknown -> error $ "Unexpected component index: " <> unknown
 
-todoImpl ''Functor ''PointI
+instance Functor (PointI i) where
+  fmap f (PointI {at = ati}) = PointI {at = f . ati}
 
-todoImpl ''Applicative ''PointI
+instance Applicative (PointI i) where
+  pure x = PointI (\_ -> x)
+
+-- PointI { at :: i -> a -> b} <*> PointI { at :: i -> a } = PointI { at :: i -> b}
+  PointI atf <*> PointI atx = PointI $ \ind -> atf ind (atx ind)
 
 
 -- 2.3. Композиция аппликативных функторов.
@@ -66,9 +73,14 @@ todoImpl ''Applicative ''PointI
 newtype Compose f g a = Compose { getCompose :: f (g a) }
   deriving (Eq, Show)
 
-todoImpl ''Functor ''Compose
+instance (Functor f, Functor g) => Functor (Compose f g) where
+  fmap h (Compose gc) = Compose $ (fmap h) <$> gc
 
-todoImpl ''Applicative ''Compose
+instance (Applicative f, Applicative g) => Applicative (Compose f g) where
+  pure x = Compose $ pure (pure x)
+
+-- Compose { :: f (g (a -> b)) } <*> Compose { :: f (g a) }  = Compose { :: f (g b) }
+  Compose gch <*> Compose gcx = Compose $ liftA2 (<*>) gch gcx
 
 
 -- 2.4. Сравнение бинарных функций.
@@ -81,7 +93,12 @@ todoImpl ''Applicative ''Compose
 type Walkable a = (Enum a, Bounded a)
 
 sameBinary :: (Walkable a, Walkable b, Eq c) => (a -> b -> c) -> (a -> b -> c) -> Bool
-sameBinary = todo "2.4"
+-- version1
+-- sameBinary f g = and [(f a b) == (g a b) | a <- [minBound..maxBound], b <- [minBound..maxBound]]
+-- version2
+sameBinary f g = and $ liftA2 (==) (allEntries f) (allEntries g)
+  where
+    allEntries func = ZipList $ liftA2 func [minBound..maxBound] [minBound..maxBound]
 
 
 -- 2.5. Разное: лучший игрок.
@@ -91,5 +108,17 @@ sameBinary = todo "2.4"
 -- игроков, верните первого из них в исходном списке.
 -- Способ решения выберите сами.
 
+{-
+data Player = Player
+  { playerName :: String
+  , playerScore :: Integer
+  }
+-}
+
 bestPlayer :: [Player] -> Maybe Player
-bestPlayer = todo "2.5"
+bestPlayer = foldr (\x y -> Just $ cmpPlmb x y) Nothing
+  where
+    cmpPlmb pl1 Nothing = pl1
+    cmpPlmb pl1 (Just pl2)
+      | playerScore pl1 >= playerScore pl2 = pl1
+      | otherwise = pl2
