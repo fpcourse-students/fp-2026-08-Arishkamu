@@ -24,11 +24,20 @@ class Functor f => Monoidal (f :: Type -> Type) where
 
 infixl 4 *&*
 
-todoImpl ''Monoidal ''Maybe
+instance Monoidal Maybe where
+  unit = Just ()
+  mb1 *&* mb2 = case (mb1,mb2) of
+    (Nothing,_) -> Nothing
+    (_,Nothing) -> Nothing
+    (Just x, Just y) -> Just (x, y)
 
-todoImpl ''Monoidal ''(->)
+instance Monoidal ((->) e) where
+  unit = \_ -> ()
+  f *&* g = \e -> (f e, g e)
 
-todoImpl ''Monoidal ''(,)
+instance Monoid e => Monoidal ((,) e) where
+  unit = (mempty, ())
+  (e1, x) *&* (e2, y) = (e1 <> e2, (x, y))
 
 
 -- 3.2. Эквивалентность интерфейсов.
@@ -40,16 +49,22 @@ todoImpl ''Monoidal ''(,)
 newtype ApplicativeMonoidal f a = ApplicativeMonoidal { runAM :: f a }
   deriving (Eq, Show)
 
-todoImpl ''Functor ''ApplicativeMonoidal
+instance Functor f => Functor (ApplicativeMonoidal f) where
+  fmap g (ApplicativeMonoidal rAM) = ApplicativeMonoidal $ fmap g rAM
 
-todoImpl ''Monoidal ''ApplicativeMonoidal
+instance Applicative f => Monoidal (ApplicativeMonoidal f) where
+  unit = ApplicativeMonoidal $ pure ()
+  (ApplicativeMonoidal rAMx) *&* (ApplicativeMonoidal rAMy) = ApplicativeMonoidal $ liftA2 (,) rAMx rAMy
 
 newtype MonoidalApplicative f a = MonoidalApplicative { runMA :: f a }
   deriving (Eq, Show)
 
-todoImpl ''Functor ''MonoidalApplicative
+instance Functor f => Functor (MonoidalApplicative f) where
+  fmap g (MonoidalApplicative rMA) = MonoidalApplicative $ fmap g rMA
 
-todoImpl ''Applicative ''MonoidalApplicative
+instance Monoidal f => Applicative (MonoidalApplicative f) where
+  pure x = MonoidalApplicative $ fmap (\_ -> x) $ unit
+  liftA2 f (MonoidalApplicative rMAx) (MonoidalApplicative rMAy) = MonoidalApplicative $ fmap (uncurry f) (rMAx *&* rMAy)
 
 
 -- 3.3. Сложение на консоли.
@@ -68,7 +83,9 @@ todoImpl ''Applicative ''MonoidalApplicative
 -- Написанную программу можно запустить командой make run.
 
 summerAppMain :: MyIO ()
-summerAppMain = todo "3.3"
+summerAppMain = join myIOmyIO
+  where
+    myIOmyIO = writeInt <$> liftA2 (+) readInt readInt
 
 
 -- 3.4. Композиция MyIO и Maybe.
@@ -84,4 +101,6 @@ summerAppMain = todo "3.3"
 type App = Compose MyIO Maybe
 
 sumN :: Int -> App Int
-sumN = todo "3.4"
+sumN n
+  | n <= 0 = pure 0
+  | otherwise = liftA2 (+) (Compose readIntMaybe) (sumN (n - 1))
